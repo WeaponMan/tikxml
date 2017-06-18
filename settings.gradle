@@ -1,4 +1,4 @@
-rootProject.name = 'TikXML (Parent)'
+rootProject.name = 'parent'
 include 'core'
 include 'converter-htmlescape'
 include 'converter-date-rfc3389'
