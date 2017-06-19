@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+    <channel>
+        <image>
+            <link>https://localhost/</link>
+            <title>Localhost</title>
+            <url>https://localhost/rss.png</url>
+            <width>88</width>
+            <height>31</height>
+        </image>
+        <title>Localhost</title>
+        <link>https://localhost/rss/</link>
+        <description>Localhost machine RSS</description>
+        <language>cs</language>
+        <pubDate>Sun, 18 Jun 2017 22:00:10 GMT</pubDate>
+        <item>
+            <title>First RSS</title>
+            <link>https://localhost/first-rss</link>
+            <description>
+                Some description
+            </description>
+            <author>webmaster@localhost</author>
+            <pubDate>Sun, 18 Jun 2017 22:00:10 GMT</pubDate>
+
+            <media:thumbnail url="https://localhost/img/thumb-first.png" width="590" height="332"></media:thumbnail>
+            <guid isPermaLink="false">5454545-5455454-54545-88</guid>
+        </item>
+        <item>
+            <title>Second RSS item</title>
+            <link>https://localhost/second-rss</link>
+            <description>
+                Some description,
+                Test
+            </description>
+            <author>webmaster@localhost</author>
+            <pubDate>Sun, 18 Jun 2017 22:00:10 GMT</pubDate>
+
+            <media:thumbnail url="https://localhost/img/thumb-second.png" width="590" height="332"></media:thumbnail>
+            <guid isPermaLink="yes">5454545-5455454-54545-89</guid>
+        </item>
+    </channel>
+</rss>

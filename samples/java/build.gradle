@@ -1,0 +1,36 @@
+plugins {
+    id 'java'
+    id "net.ltgt.apt" version "0.10"
+    id 'com.github.johnrengelman.shadow' version '2.0.0'
+}
+
+group 'com.tickaroo.tikxml.sample.rss'
+version '1.0-SNAPSHOT'
+sourceCompatibility = 1.8
+
+repositories {
+    jcenter()
+    mavenCentral()
+    maven {
+        url 'http://oss.sonatype.org/content/repositories/snapshots'
+    }
+}
+
+compileJava {
+    //custom primitive converter
+    options.compilerArgs += ["-AprimitiveTypeConverters=java.lang.Boolean,boolean"]
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.tickaroo.tikxml.sample.rss.MainClass'
+    }
+}
+
+
+dependencies {
+    compile 'com.tickaroo.tikxml:annotation:0.8.12-SNAPSHOT'
+    compile 'com.tickaroo.tikxml:core:0.8.12-SNAPSHOT'
+
+    apt 'com.tickaroo.tikxml:processor:0.8.12-SNAPSHOT'
+}
