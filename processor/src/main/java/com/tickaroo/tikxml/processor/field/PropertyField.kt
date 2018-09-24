@@ -20,64 +20,60 @@ package com.tickaroo.tikxml.processor.field
 
 import com.squareup.javapoet.*
 import com.tickaroo.tikxml.processor.generator.CodeGeneratorHelper
-import com.tickaroo.tikxml.processor.utils.ifValueNotNullCheck
+import com.tickaroo.tikxml.processor.utils.endXmlElement
+import com.tickaroo.tikxml.processor.utils.generateChildBindAnnonymousClass
+import com.tickaroo.tikxml.processor.utils.generateCodeBlockIfValueCanBeNull
 import com.tickaroo.tikxml.processor.xml.XmlChildElement
 import java.util.*
-import javax.lang.model.element.Modifier
 import javax.lang.model.element.VariableElement
 
 /**
  * This class represents a field annotated with [com.tickaroo.tikxml.annotation.PropertyElement]
  * @author Hannes Dorfmann
  */
-class PropertyField(element: VariableElement, name: String, val writeAsCData: Boolean = false, val converterQualifiedName: String? = null) : NamedField(element, name), XmlChildElement {
+class PropertyField(
+        element: VariableElement,
+        name: String,
+        val writeAsCData: Boolean = false,
+        val converterQualifiedName: String? = null
+) : NamedField(element, name), XmlChildElement {
+
     override val attributes = LinkedHashMap<String, AttributeField>()
     override val childElements = LinkedHashMap<String, XmlChildElement>()
 
     override fun isXmlElementAccessableFromOutsideTypeAdapter() = true
 
     override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec {
-
-        if (!hasAttributes()) {
-            val fromXmlMethod = codeGeneratorHelper.fromXmlMethodBuilder()
-                    .addCode(codeGeneratorHelper.ignoreAttributes())
-                    .addCode(codeGeneratorHelper.assignViaTypeConverterOrPrimitive(element, CodeGeneratorHelper.AssignmentType.ELEMENT, accessResolver, converterQualifiedName))
-                    .build()
-
-
-            return TypeSpec.anonymousClassBuilder("")
-                    .addSuperinterface(codeGeneratorHelper.childElementBinderType)
-                    .addMethod(fromXmlMethod)
-                    .build()
-        }
-
-
-        val fromXmlMethod = codeGeneratorHelper.fromXmlMethodBuilder()
-                .addCode(codeGeneratorHelper.assignViaTypeConverterOrPrimitive(element, CodeGeneratorHelper.AssignmentType.ELEMENT, accessResolver, converterQualifiedName))
-                .build()
-
-        // Multiple attributes
-        val attributeMapType = ParameterizedTypeName.get(ClassName.get(Map::class.java), ClassName.get(String::class.java), codeGeneratorHelper.attributeBinderType)
-        val attributeHashMapType = ParameterizedTypeName.get(ClassName.get(Map::class.java), ClassName.get(String::class.java), codeGeneratorHelper.attributeBinderType)
-        return TypeSpec.anonymousClassBuilder("")
-                .addSuperinterface(codeGeneratorHelper.nestedChildElementBinderType)
-                .addField(FieldSpec.builder(attributeMapType, CodeGeneratorHelper.attributeBindersParam, Modifier.PRIVATE)
-                        .initializer("new \$T()", attributeHashMapType)
-                        .build())
-                .addInitializerBlock(codeGeneratorHelper.generateAttributeBinders(this))
-                .addMethod(fromXmlMethod)
-                .build()
-
-
+        return generateChildBindAnnonymousClass(generateReadXmlCodeWithoutMethod(codeGeneratorHelper), codeGeneratorHelper)
     }
 
-    override fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper) =
-            CodeBlock.builder()
-                    .ifValueNotNullCheck(this) {
-                        add(codeGeneratorHelper.writeBeginElementAndAttributes(this@PropertyField))
-                        add(codeGeneratorHelper.writeTextContentViaTypeConverterOrPrimitive(element, accessResolver, converterQualifiedName, writeAsCData))
-                        addStatement("${CodeGeneratorHelper.writerParam}.endElement()")
-                    }
-                    .build()
+    override fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+        val writeTextContentCodeBlock = codeGeneratorHelper.writeTextContentViaTypeConverterOrPrimitive(
+                element,
+                accessResolver,
+                converterQualifiedName,
+                writeAsCData
+        )
 
+        val body = CodeBlock.builder()
+                .add(codeGeneratorHelper.writeBeginElementAndAttributes(this@PropertyField))
+                .add(writeTextContentCodeBlock)
+                .endXmlElement()
+                .build()
+
+        return generateCodeBlockIfValueCanBeNull(body, element.asType(), accessResolver.resolveGetterForWritingXml())
+    }
+
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+        val readTextContentCodeBlock = codeGeneratorHelper.assignViaTypeConverterOrPrimitive(
+                element,
+                CodeGeneratorHelper.AssignmentType.ELEMENT,
+                accessResolver,
+                converterQualifiedName
+        )
+        return CodeBlock.builder()
+                .add(codeGeneratorHelper.ignoreAttributes())
+                .add(readTextContentCodeBlock)
+                .build()
+    }
 }

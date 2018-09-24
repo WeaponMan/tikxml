@@ -23,7 +23,8 @@ import com.squareup.javapoet.CodeBlock
 import com.squareup.javapoet.ParameterizedTypeName
 import com.squareup.javapoet.TypeSpec
 import com.tickaroo.tikxml.processor.generator.CodeGeneratorHelper
-import com.tickaroo.tikxml.processor.utils.ifValueNotNullCheck
+import com.tickaroo.tikxml.processor.utils.generateChildBindAnnonymousClass
+import com.tickaroo.tikxml.processor.utils.generateCodeBlockIfValueCanBeNull
 import com.tickaroo.tikxml.processor.xml.XmlChildElement
 import java.util.*
 import javax.lang.model.element.VariableElement
@@ -41,71 +42,75 @@ open class ElementField(element: VariableElement, name: String) : NamedField(ele
     override fun isXmlElementAccessableFromOutsideTypeAdapter() = false
 
     override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec {
-
-        val fromXmlMethod = codeGeneratorHelper.fromXmlMethodBuilder()
-                .addCode(accessResolver.resolveAssignment("(\$T)${CodeGeneratorHelper.tikConfigParam}.getTypeAdapter(\$T.class).fromXml(${CodeGeneratorHelper.readerParam}, ${CodeGeneratorHelper.tikConfigParam})", ClassName.get(element.asType()), ClassName.get(element.asType())))
-                .build()
-
-        return TypeSpec.anonymousClassBuilder("")
-                .addSuperinterface(codeGeneratorHelper.childElementBinderType)
-                .addMethod(fromXmlMethod)
-                .build()
-
+        return generateChildBindAnnonymousClass(generateReadXmlCodeWithoutMethod(codeGeneratorHelper), codeGeneratorHelper)
     }
 
     override fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
-        return CodeBlock.builder()
-                .ifValueNotNullCheck(this) {
-                    add(codeGeneratorHelper.writeDelegateToTypeAdapters(element.asType(), accessResolver, name)) // TODO optimize name. Set it null if name is not different from default name
-                }
-                .build()
+        val typeMirror = element.asType()
+        val className = ClassName.get(typeMirror)
+        val configVarName = CodeGeneratorHelper.tikConfigParam
+        val writerVarName = CodeGeneratorHelper.writerParam
+        val resolvedGetter = accessResolver.resolveGetterForWritingXml()
+        val body = CodeBlock.builder()
+                // TODO optimize name. Set it null if name is not different from default name
+                .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $resolvedGetter, \$S)", className, name)
+                .build();
+
+        return generateCodeBlockIfValueCanBeNull(body, typeMirror, resolvedGetter)
+    }
+
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+        val className = ClassName.get(element.asType())
+        val configVarName = CodeGeneratorHelper.tikConfigParam
+        val readerVarName = CodeGeneratorHelper.readerParam
+        val valueFromAdapter = "(\$T) $configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
+        return accessResolver.resolveAssignment(valueFromAdapter, className, className)
     }
 }
 
-class ListElementField(element: VariableElement, name: String, private val genericListType: TypeMirror) : ElementField(element, name) {
+class ListElementField(
+        element: VariableElement,
+        name: String,
+        private val genericListType: TypeMirror
+) : ElementField(element, name) {
 
-
-    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec {
-
-
-        val valueTypeAsArrayList = ParameterizedTypeName.get(ClassName.get(ArrayList::class.java), ClassName.get(genericListType))
-
-
-        val valueFromAdapter = " ${CodeGeneratorHelper.tikConfigParam}.getTypeAdapter(\$T.class).fromXml(${CodeGeneratorHelper.readerParam}, ${CodeGeneratorHelper.tikConfigParam})"
-
-        val fromXmlMethod = codeGeneratorHelper.fromXmlMethodBuilder()
-                .addCode(CodeBlock.builder()
-                        .beginControlFlow("if (${accessResolver.resolveGetterForReadingXml()} == null)")
-                        .add(accessResolver.resolveAssignment("(\$T) new \$T()", valueTypeAsArrayList, valueTypeAsArrayList)) // TODO remove this
-                        .endControlFlow()
-                        .build())
-                .addStatement("${accessResolver.resolveGetterForReadingXml()}.add((\$T) $valueFromAdapter )", ClassName.get(genericListType), ClassName.get(genericListType))
-                .build()
-
-        return TypeSpec.anonymousClassBuilder("")
-                .addSuperinterface(codeGeneratorHelper.childElementBinderType)
-                .addMethod(fromXmlMethod)
-                .build()
-
+    companion object {
+        const val sizeVarName = "listSize"
+        const val listVarName = "list"
+        const val itemVarName = "item"
     }
 
-    override fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper) =
-            CodeBlock.builder()
-                    .ifValueNotNullCheck(this) {
+    override fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+        val typeMirror = element.asType()
+        val listType = ParameterizedTypeName.get(typeMirror)
+        val itemClassName = ClassName.get(genericListType)
+        val configVarName = CodeGeneratorHelper.tikConfigParam
+        val writerVarName = CodeGeneratorHelper.writerParam
+        val resolvedGetter = accessResolver.resolveGetterForWritingXml()
+        val body = CodeBlock.builder()
+                .addStatement("\$T $listVarName = $resolvedGetter", listType)
+                .beginControlFlow("for (int i = 0, $sizeVarName = $listVarName.size(); i < $sizeVarName; i++)")
+                .addStatement("\$T $itemVarName = $listVarName.get(i)", itemClassName)
+                // TODO optimize name. Set it null if name is not different from default name
+                .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $itemVarName, \$S)", itemClassName, name)
+                .endControlFlow()
+                .build()
 
-                        val listType = ParameterizedTypeName.get(element.asType())
-                        val sizeVariableName = "listSize"
-                        val listVariableName = "list"
-                        val itemVariableName = "item";
+        return generateCodeBlockIfValueCanBeNull(body, typeMirror, resolvedGetter)
+    }
 
-
-                        addStatement("\$T $listVariableName = ${accessResolver.resolveGetterForWritingXml()}", listType)
-                        addStatement("int $sizeVariableName = $listVariableName.size()")
-                        beginControlFlow("for (int i =0; i<$sizeVariableName; i++)")
-                        addStatement("\$T $itemVariableName = $listVariableName.get(i)", ClassName.get(genericListType))
-                        addStatement("${CodeGeneratorHelper.tikConfigParam}.getTypeAdapter(\$T.class).toXml(${CodeGeneratorHelper.writerParam}, ${CodeGeneratorHelper.tikConfigParam}, $itemVariableName, \$S)", ClassName.get(genericListType), name)
-                        endControlFlow()
-                    }
-                    .build()
-
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+        val className = ClassName.get(genericListType)
+        val arrayListType = ParameterizedTypeName.get(ClassName.get(ArrayList::class.java), className)
+        val configVarName = CodeGeneratorHelper.tikConfigParam
+        val readerVarName = CodeGeneratorHelper.readerParam
+        val valueFromAdapter = "(\$T) $configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
+        val resolvedGetter = accessResolver.resolveGetterForReadingXml()
+        return CodeBlock.builder()
+                .beginControlFlow("if ($resolvedGetter == null)")
+                .add(accessResolver.resolveAssignment("(\$T) new \$T()", arrayListType, arrayListType)) // TODO remove this
+                .endControlFlow()
+                .addStatement("$resolvedGetter.add($valueFromAdapter)", className, className)
+                .build()
+    }
 }

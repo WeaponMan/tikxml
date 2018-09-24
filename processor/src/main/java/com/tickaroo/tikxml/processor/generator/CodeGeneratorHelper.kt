@@ -448,19 +448,11 @@ class CodeGeneratorHelper(
                     .add(writeBeginElement(childElement.name))
                     .apply { add(writeAttributesAsXml(childElement)) }
                     .build()
-
     /**
      * writes the typical <foo  xml opening stuff
      */
     fun writeBeginElement(elementName: String) =
             CodeBlock.builder().addStatement("$writerParam.beginElement(\$S)", elementName).build()
-
-    /**
-     * Writes the code to continue to delegate reading sub elements from TypeAdapter via tikConfig
-     */
-    fun writeDelegateToTypeAdapters(type: TypeMirror, accessResolver: FieldAccessResolver, overridingXmlElementName: String?) =
-            CodeBlock.builder().addStatement("$tikConfigParam.getTypeAdapter(\$T.class).toXml($writerParam, $tikConfigParam, ${accessResolver.resolveGetterForWritingXml()}, ${if (overridingXmlElementName == null) "null" else "\"$overridingXmlElementName\""})", ClassName.get(type))
-                    .build()
 
     /**
      * Writes the code to generate xml by generating to the corresponding type adapter depending on the type of the element

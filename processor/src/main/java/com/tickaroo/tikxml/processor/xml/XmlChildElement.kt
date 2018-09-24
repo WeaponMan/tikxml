@@ -34,4 +34,6 @@ interface XmlChildElement : XmlElement {
 
     fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper) : CodeBlock
 
+    fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock
+
 }

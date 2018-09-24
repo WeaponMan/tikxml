@@ -20,6 +20,7 @@ package com.tickaroo.tikxml.processor.xml
 
 import com.squareup.javapoet.CodeBlock
 import com.squareup.javapoet.TypeSpec
+import com.tickaroo.tikxml.processor.ProcessingException
 import com.tickaroo.tikxml.processor.field.AttributeField
 import com.tickaroo.tikxml.processor.generator.CodeGeneratorHelper
 import com.tickaroo.tikxml.processor.utils.endXmlElement
@@ -36,7 +37,6 @@ import javax.lang.model.element.VariableElement
  * @author Hannes Dorfmann
  */
 class PlaceholderXmlElement(override val name: String, override val element: Element) : XmlChildElement {
-
 
     override val attributes = HashMap<String, AttributeField>()
     override val childElements = HashMap<String, XmlChildElement>()
@@ -59,4 +59,8 @@ class PlaceholderXmlElement(override val name: String, override val element: Ele
                     .add(codeGeneratorHelper.writeChildrenByResolvingPolymorphismElementsOrFieldsOrDelegateToChildCodeGenerator(this))
                     .endXmlElement()
                     .build()
+
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+        throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this. Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
+    }
 }
