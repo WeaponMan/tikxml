@@ -21,6 +21,7 @@ package com.tickaroo.tikxml.processor.field
 import com.tickaroo.tikxml.annotation.Xml
 import com.tickaroo.tikxml.processor.ProcessingException
 import com.tickaroo.tikxml.processor.XmlCharacters
+import com.tickaroo.tikxml.processor.utils.getNameRootNameFromElementOrAnnotation
 import com.tickaroo.tikxml.processor.xml.XmlChildElement
 import com.tickaroo.tikxml.processor.xml.XmlRootElement
 import java.util.*
@@ -76,16 +77,7 @@ class AnnotatedClassImpl
         val xmlAnnotation = element.getAnnotation(Xml::class.java)
         inheritance = xmlAnnotation.inheritance
 
-        nameAsRoot =
-                if (xmlAnnotation.name.isEmpty()) {
-                    if (simpleClassName.length <= 1) {
-                        simpleClassName.decapitalize()
-                    } else {
-                        simpleClassName[0].toLowerCase() + simpleClassName.substring(1)
-                    }
-                } else {
-                    xmlAnnotation.name
-                }
+        nameAsRoot =  getNameRootNameFromElementOrAnnotation(simpleClassName, xmlAnnotation)
 
         if (xmlAnnotation.writeNamespaces.isEmpty()) {
             writeNamespaces = emptyList()

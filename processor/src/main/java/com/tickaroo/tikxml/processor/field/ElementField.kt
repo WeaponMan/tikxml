@@ -25,6 +25,7 @@ import com.squareup.javapoet.TypeSpec
 import com.tickaroo.tikxml.processor.generator.CodeGeneratorHelper
 import com.tickaroo.tikxml.processor.utils.generateChildBindAnnonymousClass
 import com.tickaroo.tikxml.processor.utils.generateCodeBlockIfValueCanBeNull
+import com.tickaroo.tikxml.processor.utils.getWriteXmlName
 import com.tickaroo.tikxml.processor.xml.XmlChildElement
 import java.util.*
 import javax.lang.model.element.VariableElement
@@ -51,9 +52,11 @@ open class ElementField(element: VariableElement, name: String) : NamedField(ele
         val configVarName = CodeGeneratorHelper.tikConfigParam
         val writerVarName = CodeGeneratorHelper.writerParam
         val resolvedGetter = accessResolver.resolveGetterForWritingXml()
+        val defaultName = element.getWriteXmlName()
+        val overrideName = if(defaultName == name) null else name
+
         val body = CodeBlock.builder()
-                // TODO optimize name. Set it null if name is not different from default name
-                .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $resolvedGetter, \$S)", className, name)
+                .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $resolvedGetter, \$S)", className, overrideName)
                 .build();
 
         return generateCodeBlockIfValueCanBeNull(body, typeMirror, resolvedGetter)
@@ -87,12 +90,14 @@ class ListElementField(
         val configVarName = CodeGeneratorHelper.tikConfigParam
         val writerVarName = CodeGeneratorHelper.writerParam
         val resolvedGetter = accessResolver.resolveGetterForWritingXml()
+        val defaultName = element.getWriteXmlName()
+        val overrideName = if(defaultName == name) null else name
+
         val body = CodeBlock.builder()
                 .addStatement("\$T $listVarName = $resolvedGetter", listType)
                 .beginControlFlow("for (int i = 0, $sizeVarName = $listVarName.size(); i < $sizeVarName; i++)")
                 .addStatement("\$T $itemVarName = $listVarName.get(i)", itemClassName)
-                // TODO optimize name. Set it null if name is not different from default name
-                .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $itemVarName, \$S)", itemClassName, name)
+                .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $itemVarName, \$S)", itemClassName, overrideName)
                 .endControlFlow()
                 .build()
 

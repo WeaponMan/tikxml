@@ -473,7 +473,9 @@ class CodeGeneratorHelper(
                             } else {
                                 nextControlFlow("else if ($variableName instanceof \$T)", ClassName.get(nameMatcher.type))
                             }
-                            addStatement("$tikConfigParam.getTypeAdapter(\$T.class).toXml($writerParam, $tikConfigParam, (\$T) $variableName, \$S)", ClassName.get(nameMatcher.type), ClassName.get(nameMatcher.type), nameMatcher.xmlElementName)
+                            val defaultName = nameMatcher.type.getWriteXmlName()
+                            val overrideName = if(defaultName == nameMatcher.xmlElementName) null else nameMatcher.xmlElementName
+                            addStatement("$tikConfigParam.getTypeAdapter(\$T.class).toXml($writerParam, $tikConfigParam, (\$T) $variableName, \$S)", ClassName.get(nameMatcher.type), ClassName.get(nameMatcher.type), overrideName)
                         }
 
 

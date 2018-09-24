@@ -19,7 +19,11 @@ package com.tickaroo.tikxml.processor.utils
 
 import com.squareup.javapoet.CodeBlock
 import com.squareup.javapoet.TypeSpec
+import com.tickaroo.tikxml.annotation.Xml
 import com.tickaroo.tikxml.processor.generator.CodeGeneratorHelper
+import javax.lang.model.element.TypeElement
+import javax.lang.model.element.VariableElement
+import javax.lang.model.type.DeclaredType
 import javax.lang.model.type.TypeMirror
 
 fun generateChildBindAnnonymousClass(body: CodeBlock, codeGeneratorHelper: CodeGeneratorHelper) =
@@ -41,4 +45,23 @@ fun generateCodeBlockIfValueCanBeNull(body: CodeBlock, typeMirror: TypeMirror, r
             .add(body)
             .endControlFlow()
             .build()
+}
+
+fun getNameRootNameFromElementOrAnnotation(simpleClassName: String, xmlAnnotation: Xml?): String {
+    if (xmlAnnotation != null && xmlAnnotation.name.isNotEmpty()) {
+        return xmlAnnotation.name
+    }
+
+    return simpleClassName.decapitalize()
+}
+
+fun VariableElement.getWriteXmlName(): String {
+    return this.asType().getWriteXmlName()
+}
+
+fun TypeMirror.getWriteXmlName(): String {
+    val element = (this as DeclaredType).asElement() as TypeElement
+    val simpleClassName = element.simpleName.toString()
+    val xmlAnnotation = element.getAnnotation(Xml::class.java)
+    return getNameRootNameFromElementOrAnnotation(simpleClassName, xmlAnnotation)
 }
