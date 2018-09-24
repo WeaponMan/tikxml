@@ -56,7 +56,7 @@ class PropertyField(
         )
 
         val body = CodeBlock.builder()
-                .add(codeGeneratorHelper.writeBeginElementAndAttributes(this@PropertyField))
+                .add(codeGeneratorHelper.writeBeginElement(name))
                 .add(writeTextContentCodeBlock)
                 .endXmlElement()
                 .build()
