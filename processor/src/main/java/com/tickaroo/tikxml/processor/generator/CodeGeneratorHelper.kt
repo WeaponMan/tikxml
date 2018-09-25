@@ -31,6 +31,7 @@ import com.tickaroo.tikxml.processor.field.PolymorphicSubstitutionListField
 import com.tickaroo.tikxml.processor.field.PolymorphicTypeElementNameMatcher
 import com.tickaroo.tikxml.processor.field.access.FieldAccessResolver
 import com.tickaroo.tikxml.processor.utils.*
+import com.tickaroo.tikxml.processor.xml.PlaceholderXmlElement
 import com.tickaroo.tikxml.processor.xml.XmlChildElement
 import com.tickaroo.tikxml.processor.xml.XmlElement
 import com.tickaroo.tikxml.typeadapter.AttributeBinder
@@ -229,6 +230,66 @@ class CodeGeneratorHelper(
         return builder.build()
     }
 
+    fun generateElementReadFlowControl(element: XmlElement, targetClassToParseInto: ClassName): CodeBlock {
+        val notNestedElements = element.childElements.filter { it.value !is PlaceholderXmlElement }.map {
+            it.key to it.value.generateReadXmlCodeWithoutMethod(this)
+        }
+        val generateChildBinder = element.childElements.size != notNestedElements.size
+        val typeName = ParameterizedTypeName.get(ClassName.get(ChildElementBinder::class.java), targetClassToParseInto)
+
+        return CodeBlock.builder().apply {
+            addStatement("\$L.beginElement()", readerParam)
+            addStatement("String elementName = \$L.nextElementName()", readerParam)
+            when (notNestedElements.size) {
+                0 -> {
+                    if (generateChildBinder) {
+                        add(generateChildElementBinding(typeName))
+                    } else {
+                        add(generateCheckForNotMappedElements())
+                    }
+                }
+                1 -> {
+                    val (attrName, assignCode) = notNestedElements.first()
+                    beginControlFlow("if(elementName.equals(\$S))", attrName)
+                    add(assignCode)
+                    addStatement("\$L.endElement()", readerParam)
+                    nextControlFlow("else")
+                    if (generateChildBinder) {
+                        add(generateChildElementBinding(typeName))
+                    } else {
+                        add(generateCheckForNotMappedElements())
+                    }
+                    endControlFlow()
+                }
+                else -> {
+                    beginControlFlow("switch(elementName)")
+
+                    notNestedElements.forEach {
+                        val (attrName, assignCode) = it
+                        add("case \$S:\n", attrName)
+                        indent()
+                        add(assignCode)
+                        addStatement("\$L.endElement()", readerParam)
+                        addStatement("break")
+                        unindent()
+                    }
+
+                    add("default:\n")
+                    indent()
+                    if (generateChildBinder) {
+                        add(generateChildElementBinding(typeName))
+                    } else {
+                        add(generateCheckForNotMappedElements())
+                    }
+                    addStatement("break")
+                    unindent()
+                    endControlFlow()
+                }
+            }
+        }.build()
+    }
+
+
     /**
      * Generate code for reading xml parameters
      */
@@ -280,19 +341,47 @@ class CodeGeneratorHelper(
         }.build()
     }
 
+    fun generateChildElementBinding(typeName: ParameterizedTypeName) = CodeBlock.builder()
+            .addStatement("\$T childElementBinder = \$L.get(elementName)", typeName, childElementBindersParam)
+            .beginControlFlow("if (childElementBinder != null)")
+            .addStatement("childElementBinder.fromXml(\$L, \$L, \$L)", readerParam, tikConfigParam, valueParam)
+            .addStatement("\$L.endElement()", readerParam)
+            .nextControlFlow("else")
+            .add(generateCheckForNotMappedElements())
+            .endControlFlow()
+            .build()
+
     fun generateCheckForNotMappedAttributes(): CodeBlock = CodeBlock.builder()
-            .beginControlFlow("if (\$L.exceptionOnUnreadXml() && !attributeName.startsWith(\$S))", tikConfigParam, namespaceDefinitionPrefix)
+            .beginControlFlow(
+                    "if (\$L.exceptionOnUnreadXml() && !attributeName.startsWith(\$S))",
+                    tikConfigParam,
+                    namespaceDefinitionPrefix
+            )
             .addStatement(
                     "throw new \$T(\$S+attributeName+\$S+\$L.getPath()+\$S)", IOException::class.java,
                     "Could not map the xml attribute with the name '",
                     "' at path ",
                     readerParam,
-                    " to java class. Have you annotated such a field in your java class to map this xml attribute? Otherwise you can turn this error message off with TikXml.Builder().exceptionOnUnreadXml(false).build()."
+                    " to java class. Have you annotated such a field in your java class to map this xml attribute? " +
+                            "Otherwise you can turn this error message off with " +
+                            "TikXml.Builder().exceptionOnUnreadXml(false).build()."
             )
             .endControlFlow() // End if
             .addStatement("\$L.skipAttributeValue()", readerParam)
             .build()
 
+
+    fun generateCheckForNotMappedElements(): CodeBlock = CodeBlock.builder()
+            .beginControlFlow("if (\$L.exceptionOnUnreadXml())", tikConfigParam)
+            .addStatement("throw new \$T(\$S + \$L + \$S + \$L.getPath()+\$S)", IOException::class.java,
+                    "Could not map the xml element with the tag name <", "elementName", "> at path '",
+                    readerParam,
+                    "' to java class. Have you annotated such a field in your java class to map this xml attribute?" +
+                            " Otherwise you can turn this error message off with " +
+                            "TikXml.Builder().exceptionOnUnreadXml(false).build().")
+            .endControlFlow() // End if
+            .addStatement("\$L.skipRemainingElement()", readerParam)
+            .build()
 
     /**
      * get the assignment statement for reading attributes
@@ -561,7 +650,6 @@ class CodeGeneratorHelper(
      */
     fun writeChildrenByResolvingPolymorphismElementsOrFieldsOrDelegateToChildCodeGenerator(xmlElement: XmlElement): CodeBlock {
         val sizeVarName = ListElementField.sizeVarName
-        val listVarName = ListElementField.listVarName
         val itemVarName = ListElementField.itemVarName
 
         return CodeBlock.builder().apply {
@@ -569,6 +657,7 @@ class CodeGeneratorHelper(
                 val first = it.value.first()
                 when (first) {
                     is PolymorphicSubstitutionListField -> {
+                        val uniqueListName = uniqueVariableName(ListElementField.listVarName)
                         // Resolve polymorphism on list items
                         val listType = ClassName.get(first.originalElementTypeMirror)
                         val resolvedGetter = first.accessResolver.resolveGetterForWritingXml()
@@ -579,9 +668,9 @@ class CodeGeneratorHelper(
                         }
 
                         beginControlFlow("if ($resolvedGetter != null)")
-                        addStatement("\$T $listVarName = $resolvedGetter", listType)
-                        beginControlFlow("for (int i =0, $sizeVarName = $listVarName.size(); i<$sizeVarName; i++)")
-                        addStatement("\$T $itemVarName = $listVarName.get(i)", ClassName.get(Object::class.java))
+                        addStatement("\$T $uniqueListName = $resolvedGetter", listType)
+                        beginControlFlow("for (int i =0, $sizeVarName = $uniqueListName.size(); i<$sizeVarName; i++)")
+                        addStatement("\$T $itemVarName = $uniqueListName.get(i)", ClassName.get(Object::class.java))
                         add(writeResolvePolymorphismAndDelegteToTypeAdpters(itemVarName, elementTypeMatchers)) // does the if instance of checks
                         endControlFlow() // end for loop
                         endControlFlow() // end != null check
@@ -605,6 +694,7 @@ class CodeGeneratorHelper(
             }
         }.build()
     }
+
     /**
      * Used to specify whether we are going to assign an xml attribute or an xml element text content
      */

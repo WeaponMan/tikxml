@@ -92,11 +92,12 @@ class ListElementField(
         val resolvedGetter = accessResolver.resolveGetterForWritingXml()
         val defaultName = element.getWriteXmlName()
         val overrideName = if(defaultName == name) null else name
+        val uniqueListName = codeGeneratorHelper.uniqueVariableName(listVarName)
 
         val body = CodeBlock.builder()
-                .addStatement("\$T $listVarName = $resolvedGetter", listType)
-                .beginControlFlow("for (int i = 0, $sizeVarName = $listVarName.size(); i < $sizeVarName; i++)")
-                .addStatement("\$T $itemVarName = $listVarName.get(i)", itemClassName)
+                .addStatement("\$T $uniqueListName = $resolvedGetter", listType)
+                .beginControlFlow("for (int i = 0, $sizeVarName = $uniqueListName.size(); i < $sizeVarName; i++)")
+                .addStatement("\$T $itemVarName = $uniqueListName.get(i)", itemClassName)
                 .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $itemVarName, \$S)", itemClassName, overrideName)
                 .endControlFlow()
                 .build()

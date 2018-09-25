@@ -45,15 +45,18 @@ open class PolymorphicElementField(
     val substitutions = ArrayList<PolymorphicSubstitutionField>()
 
     override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec {
-        throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this. Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
+        throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this." +
+                " Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
     }
 
     override fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
-        throw ProcessingException(element, "Oops, en error has occurred while generating writing xml code for $this. Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
+        throw ProcessingException(element, "Oops, en error has occurred while generating writing xml code for $this." +
+                " Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
     }
 
     override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
-        throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this. Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
+        throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this. " +
+                "Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
     }
 }
 
@@ -115,12 +118,13 @@ class PolymorphicSubstitutionListField(
         val readerVarName = CodeGeneratorHelper.readerParam
         val valueFromAdapter = "(\$T) $configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
         val resolvedGetter = accessResolver.resolveGetterForReadingXml()
+        val uniqueItemVar = codeGeneratorHelper.uniqueVariableName("element")
         return CodeBlock.builder()
                 .beginControlFlow("if ($resolvedGetter == null)")
                 .add(accessResolver.resolveAssignment("new \$T()", arrayListType)) // TODO remove this
                 .endControlFlow()
-                .addStatement("\$T v = $valueFromAdapter", className, className, className)
-                .addStatement("$resolvedGetter.add(v)")
+                .addStatement("\$T $uniqueItemVar = $valueFromAdapter", className, className, className)
+                .addStatement("$resolvedGetter.add($uniqueItemVar)")
                 .build()
     }
 }
