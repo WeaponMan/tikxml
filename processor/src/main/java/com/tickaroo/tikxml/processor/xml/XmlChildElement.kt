@@ -30,10 +30,10 @@ interface XmlChildElement : XmlElement {
 
     val name: String
 
-    fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec
+    fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): TypeSpec
 
     fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper) : CodeBlock
 
-    fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock
+    fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): CodeBlock
 
 }

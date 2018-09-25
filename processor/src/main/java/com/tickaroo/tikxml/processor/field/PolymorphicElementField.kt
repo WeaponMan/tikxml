@@ -44,7 +44,7 @@ open class PolymorphicElementField(
 
     val substitutions = ArrayList<PolymorphicSubstitutionField>()
 
-    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec {
+    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): TypeSpec {
         throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this." +
                 " Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
     }
@@ -54,7 +54,7 @@ open class PolymorphicElementField(
                 " Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
     }
 
-    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): CodeBlock {
         throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this. " +
                 "Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
     }
@@ -86,7 +86,7 @@ open class PolymorphicSubstitutionField(
 ) {
     override fun isXmlElementAccessableFromOutsideTypeAdapter(): Boolean = false
 
-    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): CodeBlock {
         val className = ClassName.get(typeMirror)
         val configVarName = CodeGeneratorHelper.tikConfigParam
         val readerVarName = CodeGeneratorHelper.readerParam
@@ -111,7 +111,7 @@ class PolymorphicSubstitutionListField(
         name,
         element.asType()
 ) {
-    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): CodeBlock {
         val className = ClassName.get(typeMirror)
         val arrayListType = ParameterizedTypeName.get(ClassName.get(ArrayList::class.java), ClassName.get(genericListType))
         val configVarName = CodeGeneratorHelper.tikConfigParam

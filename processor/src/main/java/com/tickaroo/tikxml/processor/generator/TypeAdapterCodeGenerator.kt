@@ -66,7 +66,7 @@ class TypeAdapterCodeGenerator(private val filer: Filer, private val elementUtil
             constructorBuilder.addStatement(
                     "${CodeGeneratorHelper.childElementBindersParam}.put(\$S, \$L)",
                     xmlName,
-                    xmlElement.generateReadXmlCode(codeGenUtils)
+                    xmlElement.generateReadXmlCode(codeGenUtils, true)
             )
         }
 
@@ -141,6 +141,7 @@ class TypeAdapterCodeGenerator(private val filer: Filer, private val elementUtil
         val reader = CodeGeneratorHelper.readerParam
         val config = CodeGeneratorHelper.tikConfigParam
         val value = CodeGeneratorHelper.valueParam
+        val raiseExceptionOnUnReadVar = CodeGeneratorHelper.raiseExceptionOnUnReadVar
         val targetClassToParseInto = getClassToParseInto(annotatedClass)
         val textContentStringBuilder = "textContentBuilder"
 
@@ -151,6 +152,7 @@ class TypeAdapterCodeGenerator(private val filer: Filer, private val elementUtil
                 .addParameter(XmlReader::class.java, reader)
                 .addParameter(TikXmlConfig::class.java, config)
                 .addException(IOException::class.java)
+                .addStatement("\$T \$L = \$L.exceptionOnUnreadXml()", Boolean::class.javaPrimitiveType, raiseExceptionOnUnReadVar, config)
                 .addStatement("\$T \$L = new \$T()", targetClassToParseInto, value, targetClassToParseInto)
 
 
@@ -170,7 +172,7 @@ class TypeAdapterCodeGenerator(private val filer: Filer, private val elementUtil
         if (!annotatedClass.hasChildElements() && !annotatedClass.hasTextContent()) {
             builder.beginControlFlow("while (\$L.hasElement() || \$L.hasTextContent())", reader, reader)
                     .beginControlFlow("if (\$L.hasElement())", reader)
-                    .beginControlFlow("if (\$L.exceptionOnUnreadXml())", config)
+                    .beginControlFlow("if (\$L)", raiseExceptionOnUnReadVar)
                     .addStatement("throw new \$T(\$S+\$L.nextElementName()+\$S+\$L.getPath()+\$S)", IOException::class.java,
                             "Could not map the xml element with the tag name '",
                             reader,
@@ -184,7 +186,7 @@ class TypeAdapterCodeGenerator(private val filer: Filer, private val elementUtil
                     .endControlFlow() // End while skiping element
                     // Skip Text Content
                     .nextControlFlow("else if (\$L.hasTextContent())", reader)
-                    .beginControlFlow("if (\$L.exceptionOnUnreadXml())", config)
+                    .beginControlFlow("if (\$L)", raiseExceptionOnUnReadVar)
                     .addStatement("throw new \$T(\$S+\$L.getPath()+\$S)", IOException::class.java,
                             "Could not map the xml element's text content at path '",
                             reader,
@@ -202,7 +204,7 @@ class TypeAdapterCodeGenerator(private val filer: Filer, private val elementUtil
             if (annotatedClass.hasTextContent()) {
                 builder.addStatement("\$L.append(\$L.nextTextContent())", textContentStringBuilder, reader)
             } else {
-                builder.beginControlFlow("if (\$L.exceptionOnUnreadXml())", config)
+                builder.beginControlFlow("if (\$L)", raiseExceptionOnUnReadVar)
                         .addStatement("throw new \$T(\$S+\$L.getPath()+\$S)", IOException::class.java,
                                 "Could not map the xml element's text content at path '",
                                 reader,

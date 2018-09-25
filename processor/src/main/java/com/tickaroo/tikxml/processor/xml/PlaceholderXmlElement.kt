@@ -46,10 +46,11 @@ class PlaceholderXmlElement(override val name: String, override val element: Ele
     override fun toString(): String = when (element) {
         is VariableElement -> "field '${element.simpleName}' in class ${element.getSurroundingClassQualifiedName()}"
         is TypeElement -> element.qualifiedName.toString()
-        else -> throw IllegalArgumentException("Oops, unexpected element type $element. This should never happen. Please fill an issue here: https://github.com/Tickaroo/tikxml/issues")
+        else -> throw IllegalArgumentException("Oops, unexpected element type $element. This should never happen. " +
+                "Please fill an issue here: https://github.com/Tickaroo/tikxml/issues")
     }
 
-    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec {
+    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): TypeSpec {
         return codeGeneratorHelper.generateNestedChildElementBinder(this)
     }
 
@@ -60,7 +61,8 @@ class PlaceholderXmlElement(override val name: String, override val element: Ele
                     .endXmlElement()
                     .build()
 
-    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
-        throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this. Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): CodeBlock {
+        throw ProcessingException(element, "Oops, en error has occurred while generating reading xml code for $this." +
+                " Please fill an issue at https://github.com/Tickaroo/tikxml/issues")
     }
 }

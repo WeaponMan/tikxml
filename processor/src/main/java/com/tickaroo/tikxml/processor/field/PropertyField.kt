@@ -43,8 +43,8 @@ class PropertyField(
 
     override fun isXmlElementAccessableFromOutsideTypeAdapter() = true
 
-    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec {
-        return generateChildBindAnnonymousClass(generateReadXmlCodeWithoutMethod(codeGeneratorHelper), codeGeneratorHelper)
+    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): TypeSpec {
+        return generateChildBindAnnonymousClass(generateReadXmlCodeWithoutMethod(codeGeneratorHelper, isNested), codeGeneratorHelper)
     }
 
     override fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
@@ -64,7 +64,7 @@ class PropertyField(
         return generateCodeBlockIfValueCanBeNull(body, element.asType(), accessResolver.resolveGetterForWritingXml())
     }
 
-    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): CodeBlock {
         val readTextContentCodeBlock = codeGeneratorHelper.assignViaTypeConverterOrPrimitive(
                 element,
                 CodeGeneratorHelper.AssignmentType.ELEMENT,
@@ -72,7 +72,7 @@ class PropertyField(
                 converterQualifiedName
         )
         return CodeBlock.builder()
-                .add(codeGeneratorHelper.ignoreAttributes())
+                .add(codeGeneratorHelper.ignoreAttributes(isNested))
                 .add(readTextContentCodeBlock)
                 .build()
     }

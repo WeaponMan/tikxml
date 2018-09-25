@@ -42,8 +42,8 @@ open class ElementField(element: VariableElement, name: String) : NamedField(ele
 
     override fun isXmlElementAccessableFromOutsideTypeAdapter() = false
 
-    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper): TypeSpec {
-        return generateChildBindAnnonymousClass(generateReadXmlCodeWithoutMethod(codeGeneratorHelper), codeGeneratorHelper)
+    override fun generateReadXmlCode(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): TypeSpec {
+        return generateChildBindAnnonymousClass(generateReadXmlCodeWithoutMethod(codeGeneratorHelper, isNested), codeGeneratorHelper)
     }
 
     override fun generateWriteXmlCode(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
@@ -53,7 +53,7 @@ open class ElementField(element: VariableElement, name: String) : NamedField(ele
         val writerVarName = CodeGeneratorHelper.writerParam
         val resolvedGetter = accessResolver.resolveGetterForWritingXml()
         val defaultName = element.getWriteXmlName()
-        val overrideName = if(defaultName == name) null else name
+        val overrideName = if (defaultName == name) null else name
 
         val body = CodeBlock.builder()
                 .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $resolvedGetter, \$S)", className, overrideName)
@@ -62,7 +62,7 @@ open class ElementField(element: VariableElement, name: String) : NamedField(ele
         return generateCodeBlockIfValueCanBeNull(body, typeMirror, resolvedGetter)
     }
 
-    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): CodeBlock {
         val className = ClassName.get(element.asType())
         val configVarName = CodeGeneratorHelper.tikConfigParam
         val readerVarName = CodeGeneratorHelper.readerParam
@@ -91,13 +91,12 @@ class ListElementField(
         val writerVarName = CodeGeneratorHelper.writerParam
         val resolvedGetter = accessResolver.resolveGetterForWritingXml()
         val defaultName = element.getWriteXmlName()
-        val overrideName = if(defaultName == name) null else name
-        val uniqueListName = codeGeneratorHelper.uniqueVariableName(listVarName)
+        val overrideName = if (defaultName == name) null else name
 
         val body = CodeBlock.builder()
-                .addStatement("\$T $uniqueListName = $resolvedGetter", listType)
-                .beginControlFlow("for (int i = 0, $sizeVarName = $uniqueListName.size(); i < $sizeVarName; i++)")
-                .addStatement("\$T $itemVarName = $uniqueListName.get(i)", itemClassName)
+                .addStatement("\$T $listVarName = $resolvedGetter", listType)
+                .beginControlFlow("for (int i = 0, $sizeVarName = $listVarName.size(); i < $sizeVarName; i++)")
+                .addStatement("\$T $itemVarName = $listVarName.get(i)", itemClassName)
                 .addStatement("$configVarName.getTypeAdapter(\$T.class).toXml($writerVarName, $configVarName, $itemVarName, \$S)", itemClassName, overrideName)
                 .endControlFlow()
                 .build()
@@ -105,7 +104,7 @@ class ListElementField(
         return generateCodeBlockIfValueCanBeNull(body, typeMirror, resolvedGetter)
     }
 
-    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper): CodeBlock {
+    override fun generateReadXmlCodeWithoutMethod(codeGeneratorHelper: CodeGeneratorHelper, isNested: Boolean): CodeBlock {
         val className = ClassName.get(genericListType)
         val arrayListType = ParameterizedTypeName.get(ClassName.get(ArrayList::class.java), className)
         val configVarName = CodeGeneratorHelper.tikConfigParam

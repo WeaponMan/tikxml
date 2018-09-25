@@ -63,6 +63,7 @@ class CodeGeneratorHelper(
         const val valueParam = "value"
         const val tikConfigParam = "config"
         const val tikConfigMethodExceptionOnUnreadXml = "exceptionOnUnreadXml"
+        const val raiseExceptionOnUnReadVar = "exceptionOnUnreadXml"
         const val textContentParam = "textContent"
         const val readerParam = "reader"
         const val writerParam = "writer"
@@ -232,7 +233,7 @@ class CodeGeneratorHelper(
 
     fun generateElementReadFlowControl(element: XmlElement, targetClassToParseInto: ClassName): CodeBlock {
         val notNestedElements = element.childElements.filter { it.value !is PlaceholderXmlElement }.map {
-            it.key to it.value.generateReadXmlCodeWithoutMethod(this)
+            it.key to it.value.generateReadXmlCodeWithoutMethod(this, false)
         }
         val generateChildBinder = element.childElements.size != notNestedElements.size
         val typeName = ParameterizedTypeName.get(ClassName.get(ChildElementBinder::class.java), targetClassToParseInto)
@@ -353,8 +354,8 @@ class CodeGeneratorHelper(
 
     fun generateCheckForNotMappedAttributes(): CodeBlock = CodeBlock.builder()
             .beginControlFlow(
-                    "if (\$L.exceptionOnUnreadXml() && !attributeName.startsWith(\$S))",
-                    tikConfigParam,
+                    "if (\$L && !attributeName.startsWith(\$S))",
+                    raiseExceptionOnUnReadVar,
                     namespaceDefinitionPrefix
             )
             .addStatement(
@@ -372,7 +373,7 @@ class CodeGeneratorHelper(
 
 
     fun generateCheckForNotMappedElements(): CodeBlock = CodeBlock.builder()
-            .beginControlFlow("if (\$L.exceptionOnUnreadXml())", tikConfigParam)
+            .beginControlFlow("if (\$L)", raiseExceptionOnUnReadVar)
             .addStatement("throw new \$T(\$S + \$L + \$S + \$L.getPath()+\$S)", IOException::class.java,
                     "Could not map the xml element with the tag name <", "elementName", "> at path '",
                     readerParam,
@@ -446,7 +447,7 @@ class CodeGeneratorHelper(
             val childBinderTypeMap = ParameterizedTypeName.get(ClassName.get(HashMap::class.java), ClassName.get(String::class.java), childElementBinderType)
             initializerBuilder.addStatement("$childElementBindersParam = new \$T()", childBinderTypeMap);
             for ((xmlName, xmlElement) in element.childElements) {
-                initializerBuilder.addStatement("${CodeGeneratorHelper.childElementBindersParam}.put(\$S, \$L)", xmlName, xmlElement.generateReadXmlCode(this))
+                initializerBuilder.addStatement("${CodeGeneratorHelper.childElementBindersParam}.put(\$S, \$L)", xmlName, xmlElement.generateReadXmlCode(this, true))
             }
         }
 
@@ -458,10 +459,16 @@ class CodeGeneratorHelper(
                 .build()
     }
 
-    fun ignoreAttributes() = CodeBlock.builder()
+    fun ignoreAttributes(isNested: Boolean) = CodeBlock.builder()
             .beginControlFlow("while(\$L.hasAttribute())", readerParam)
             .addStatement("String attributeName = \$L.nextAttributeName()", readerParam)
-            .beginControlFlow("if (\$L.exceptionOnUnreadXml() && !attributeName.startsWith(\$S))", tikConfigParam, "xmlns")
+            .apply {
+                if (isNested) {
+                    beginControlFlow("if (\$L.exceptionOnUnreadXml() && !attributeName.startsWith(\$S))", tikConfigParam, "xmlns")
+                } else {
+                    beginControlFlow("if (\$L && !attributeName.startsWith(\$S))", raiseExceptionOnUnReadVar, "xmlns")
+                }
+            }
             .addStatement("throw new \$T(\"Unread attribute '\"+ attributeName +\"' at path \"+ $readerParam.getPath())", ClassName.get(IOException::class.java))
             .endControlFlow()
             .addStatement("\$L.skipAttributeValue()", readerParam)
@@ -651,13 +658,13 @@ class CodeGeneratorHelper(
     fun writeChildrenByResolvingPolymorphismElementsOrFieldsOrDelegateToChildCodeGenerator(xmlElement: XmlElement): CodeBlock {
         val sizeVarName = ListElementField.sizeVarName
         val itemVarName = ListElementField.itemVarName
+        val listVarName = ListElementField.listVarName
 
         return CodeBlock.builder().apply {
             xmlElement.childElements.values.groupBy { it.element }.forEach {
                 val first = it.value.first()
                 when (first) {
                     is PolymorphicSubstitutionListField -> {
-                        val uniqueListName = uniqueVariableName(ListElementField.listVarName)
                         // Resolve polymorphism on list items
                         val listType = ClassName.get(first.originalElementTypeMirror)
                         val resolvedGetter = first.accessResolver.resolveGetterForWritingXml()
@@ -668,9 +675,9 @@ class CodeGeneratorHelper(
                         }
 
                         beginControlFlow("if ($resolvedGetter != null)")
-                        addStatement("\$T $uniqueListName = $resolvedGetter", listType)
-                        beginControlFlow("for (int i =0, $sizeVarName = $uniqueListName.size(); i<$sizeVarName; i++)")
-                        addStatement("\$T $itemVarName = $uniqueListName.get(i)", ClassName.get(Object::class.java))
+                        addStatement("\$T $listVarName = $resolvedGetter", listType)
+                        beginControlFlow("for (int i =0, $sizeVarName = $listVarName.size(); i<$sizeVarName; i++)")
+                        addStatement("\$T $itemVarName = $listVarName.get(i)", ClassName.get(Object::class.java))
                         add(writeResolvePolymorphismAndDelegteToTypeAdpters(itemVarName, elementTypeMatchers)) // does the if instance of checks
                         endControlFlow() // end for loop
                         endControlFlow() // end != null check
