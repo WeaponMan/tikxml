@@ -19,7 +19,6 @@
 package com.tickaroo.tikxml.processor.generator
 
 import com.squareup.javapoet.*
-import com.sun.tools.javac.jvm.Code
 import com.tickaroo.tikxml.TikXmlConfig
 import com.tickaroo.tikxml.TypeConverterNotFoundException
 import com.tickaroo.tikxml.XmlReader
@@ -41,7 +40,6 @@ import java.io.IOException
 import java.util.*
 import javax.lang.model.element.Element
 import javax.lang.model.element.Modifier
-import javax.lang.model.type.TypeMirror
 import javax.lang.model.util.Elements
 import javax.lang.model.util.Types
 
