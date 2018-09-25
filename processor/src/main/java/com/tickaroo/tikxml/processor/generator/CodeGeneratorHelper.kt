@@ -19,11 +19,13 @@
 package com.tickaroo.tikxml.processor.generator
 
 import com.squareup.javapoet.*
+import com.sun.tools.javac.jvm.Code
 import com.tickaroo.tikxml.TikXmlConfig
 import com.tickaroo.tikxml.TypeConverterNotFoundException
 import com.tickaroo.tikxml.XmlReader
 import com.tickaroo.tikxml.annotation.ElementNameMatcher
 import com.tickaroo.tikxml.processor.ProcessingException
+import com.tickaroo.tikxml.processor.field.ListElementField
 import com.tickaroo.tikxml.processor.field.PolymorphicSubstitutionField
 import com.tickaroo.tikxml.processor.field.PolymorphicSubstitutionListField
 import com.tickaroo.tikxml.processor.field.PolymorphicTypeElementNameMatcher
@@ -280,11 +282,13 @@ class CodeGeneratorHelper(
 
     fun generateCheckForNotMappedAttributes(): CodeBlock = CodeBlock.builder()
             .beginControlFlow("if (\$L.exceptionOnUnreadXml() && !attributeName.startsWith(\$S))", tikConfigParam, namespaceDefinitionPrefix)
-            .addStatement("throw new \$T(\$S+attributeName+\$S+\$L.getPath()+\$S)", IOException::class.java,
+            .addStatement(
+                    "throw new \$T(\$S+attributeName+\$S+\$L.getPath()+\$S)", IOException::class.java,
                     "Could not map the xml attribute with the name '",
                     "' at path ",
                     readerParam,
-                    " to java class. Have you annotated such a field in your java class to map this xml attribute? Otherwise you can turn this error message off with TikXml.Builder().exceptionOnUnreadXml(false).build().")
+                    " to java class. Have you annotated such a field in your java class to map this xml attribute? Otherwise you can turn this error message off with TikXml.Builder().exceptionOnUnreadXml(false).build()."
+            )
             .endControlFlow() // End if
             .addStatement("\$L.skipAttributeValue()", readerParam)
             .build()
@@ -448,6 +452,7 @@ class CodeGeneratorHelper(
                     .add(writeBeginElement(childElement.name))
                     .apply { add(writeAttributesAsXml(childElement)) }
                     .build()
+
     /**
      * writes the typical <foo  xml opening stuff
      */
@@ -457,36 +462,54 @@ class CodeGeneratorHelper(
     /**
      * Writes the code to generate xml by generating to the corresponding type adapter depending on the type of the element
      */
-    fun writeResolvePolymorphismAndDelegteToTypeAdpters(variableName: String, typeElementNameMatcher: List<PolymorphicTypeElementNameMatcher>) =
-            CodeBlock.builder()
-                    .apply {
+    fun writeResolvePolymorphismAndDelegteToTypeAdpters(
+            variableName: String,
+            typeElementNameMatcher: List<PolymorphicTypeElementNameMatcher>
+    ) = CodeBlock.builder().apply {
+        // Cannot be done with instanceof because then the inheritance hierarchy matters and so matters the order of the if checks
+        val orderByInheritanceHierarchy = orderByInheritanceHierarchy(typeElementNameMatcher, elementUtils, typeUtils)
+        if (orderByInheritanceHierarchy.size != typeElementNameMatcher.size) {
+            throw ProcessingException(null,
+                    "Oops: an unexpected exception has occurred while determining " +
+                            "the correct order for inheritance hierarchy.\n " +
+                            "Please file an issue at https://github.com/Tickaroo/tikxml/issues\n" +
+                            "Some debug information:\n" +
+                            "\tordered hierarchy elements: ${orderByInheritanceHierarchy.size}\n " +
+                            "\tTypeElementMatcher size ${typeElementNameMatcher.size}\n " +
+                            "\tordered hierarchy list: $orderByInheritanceHierarchy\n" +
+                            "\tTypeElementMatcher list $typeElementNameMatcher"
+            )
+        }
+        orderByInheritanceHierarchy.forEachIndexed { i, nameMatcher ->
+            val className = ClassName.get(nameMatcher.type)
+            if (i == 0) {
+                beginControlFlow("if ($variableName instanceof \$T)", className)
+            } else {
+                nextControlFlow("else if ($variableName instanceof \$T)", className)
+            }
+            val defaultName = nameMatcher.type.getWriteXmlName()
+            val overrideName = if (defaultName == nameMatcher.xmlElementName) null else nameMatcher.xmlElementName
+            addStatement(
+                    "$tikConfigParam.getTypeAdapter(\$T.class).toXml($writerParam, $tikConfigParam, (\$T) $variableName, \$S)",
+                    className,
+                    className,
+                    overrideName
+            )
+        }
 
 
-                        // Cannot be done with instanceof because then the inheritance hierarchy matters and so matters the order of the if checks
-                        val orderdByInheritanceHierarchy = orderByInheritanceHierarchy(typeElementNameMatcher, elementUtils, typeUtils)
-                        if (orderdByInheritanceHierarchy.size != typeElementNameMatcher.size) {
-                            throw ProcessingException(null, "Oops: an unexpected exception has occurred while determining the correct order for inheritance hierarchy. Please file an issue at https://github.com/Tickaroo/tikxml/issues . Some debug information: ordered hierarchy elements: ${orderdByInheritanceHierarchy.size} ;  TypeElementMatcher size ${typeElementNameMatcher.size} ; ordered hierarchy list: ${orderdByInheritanceHierarchy} ; TypeElementMatcher list ${typeElementNameMatcher}")
-                        }
-                        orderdByInheritanceHierarchy.forEachIndexed { i, nameMatcher ->
-                            if (i == 0) {
-                                beginControlFlow("if ($variableName instanceof \$T)", ClassName.get(nameMatcher.type))
-                            } else {
-                                nextControlFlow("else if ($variableName instanceof \$T)", ClassName.get(nameMatcher.type))
-                            }
-                            val defaultName = nameMatcher.type.getWriteXmlName()
-                            val overrideName = if(defaultName == nameMatcher.xmlElementName) null else nameMatcher.xmlElementName
-                            addStatement("$tikConfigParam.getTypeAdapter(\$T.class).toXml($writerParam, $tikConfigParam, (\$T) $variableName, \$S)", ClassName.get(nameMatcher.type), ClassName.get(nameMatcher.type), overrideName)
-                        }
-
-
-                        if (typeElementNameMatcher.isNotEmpty()) {
-                            nextControlFlow("else")
-                            addStatement("throw new \$T(\$S + $variableName + \$S)", ClassName.get(IOException::class.java), "Don't know how to write the element of type ", " as XML. Most likely you have forgotten to register for this type with @${ElementNameMatcher::class.simpleName} when resolving polymorphism.")
-                            endControlFlow()
-                        }
-
-                    }
-                    .build()
+        if (typeElementNameMatcher.isNotEmpty()) {
+            nextControlFlow("else")
+            addStatement(
+                    "throw new \$T(\$S + $variableName + \$S)",
+                    ClassName.get(IOException::class.java),
+                    "Don't know how to write the element of type ",
+                    " as XML. Most likely you have forgotten to register for this type " +
+                            "with @${ElementNameMatcher::class.simpleName} when resolving polymorphism."
+            )
+            endControlFlow()
+        }
+    }.build()
 
     /**
      * Writes the text content via type adapter. This is used i.e. for property fields and or textContent fields
@@ -536,49 +559,52 @@ class CodeGeneratorHelper(
     /**
      * Generates the code tat is able to resolve polymorphism for lists, polymorphic elements or by simply forwarding code generation to the child.
      */
-    fun writeChildrenByResolvingPolymorphismElementsOrFieldsOrDelegateToChildCodeGenerator(xmlElement: XmlElement) =
-            CodeBlock.builder().apply {
-                xmlElement.childElements.values.groupBy { it.element }.forEach {
+    fun writeChildrenByResolvingPolymorphismElementsOrFieldsOrDelegateToChildCodeGenerator(xmlElement: XmlElement): CodeBlock {
+        val sizeVarName = ListElementField.sizeVarName
+        val listVarName = ListElementField.listVarName
+        val itemVarName = ListElementField.itemVarName
 
-                    val first = it.value[0]
-                    if (first is PolymorphicSubstitutionListField) {
-
+        return CodeBlock.builder().apply {
+            xmlElement.childElements.values.groupBy { it.element }.forEach {
+                val first = it.value.first()
+                when (first) {
+                    is PolymorphicSubstitutionListField -> {
                         // Resolve polymorphism on list items
                         val listType = ClassName.get(first.originalElementTypeMirror)
-                        val sizeVariableName = "listSize"
-                        val listVariableName = "list"
-                        val itemVariableName = "item";
+                        val resolvedGetter = first.accessResolver.resolveGetterForWritingXml()
+
                         val elementTypeMatchers: List<PolymorphicTypeElementNameMatcher> = it.value.map {
                             val i = it as PolymorphicSubstitutionListField
                             PolymorphicTypeElementNameMatcher(i.name, i.typeMirror)
                         }
 
-                        beginControlFlow("if (${first.accessResolver.resolveGetterForWritingXml()}!= null)")
-                        addStatement("\$T $listVariableName = ${first.accessResolver.resolveGetterForWritingXml()}", listType)
-                        addStatement("int $sizeVariableName = $listVariableName.size()")
-                        beginControlFlow("for (int i =0; i<$sizeVariableName; i++)")
-                        addStatement("\$T $itemVariableName = $listVariableName.get(i)", ClassName.get(Object::class.java))
-                        add(writeResolvePolymorphismAndDelegteToTypeAdpters(itemVariableName, elementTypeMatchers)) // does the if instance of checks
+                        beginControlFlow("if ($resolvedGetter != null)")
+                        addStatement("\$T $listVarName = $resolvedGetter", listType)
+                        beginControlFlow("for (int i =0, $sizeVarName = $listVarName.size(); i<$sizeVarName; i++)")
+                        addStatement("\$T $itemVarName = $listVarName.get(i)", ClassName.get(Object::class.java))
+                        add(writeResolvePolymorphismAndDelegteToTypeAdpters(itemVarName, elementTypeMatchers)) // does the if instance of checks
                         endControlFlow() // end for loop
                         endControlFlow() // end != null check
 
-                    } else if (first is PolymorphicSubstitutionField) {
+                    }
+                    is PolymorphicSubstitutionField -> {
+                        val resolvedGetter = first.accessResolver.resolveGetterForWritingXml()
                         // Resolve polymorphism for fields
                         val elementTypeMatchers: List<PolymorphicTypeElementNameMatcher> = it.value.map {
                             val i = it as PolymorphicSubstitutionField
                             PolymorphicTypeElementNameMatcher(i.name, i.typeMirror)
                         }
-                        beginControlFlow("if (${first.accessResolver.resolveGetterForWritingXml()} != null)")
-                        addStatement("\$T element = ${first.accessResolver.resolveGetterForWritingXml()}", ClassName.get(first.originalElementTypeMirror))  // does the if instance of checks
+                        beginControlFlow("if ($resolvedGetter != null)")
+                        addStatement("\$T element = $resolvedGetter", ClassName.get(first.originalElementTypeMirror))  // does the if instance of checks
                         add(writeResolvePolymorphismAndDelegteToTypeAdpters("element", elementTypeMatchers))
                         endControlFlow() // end != null check
 
-                    } else {
-                        it.value.forEach { add(it.generateWriteXmlCode(this@CodeGeneratorHelper)) }
                     }
+                    else -> it.value.forEach { add(it.generateWriteXmlCode(this@CodeGeneratorHelper)) }
                 }
-            }.build()
-
+            }
+        }.build()
+    }
     /**
      * Used to specify whether we are going to assign an xml attribute or an xml element text content
      */
