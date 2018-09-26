@@ -127,7 +127,7 @@ class PolymorphicSubstitutionListField(
                 .add(accessResolver.resolveAssignment("new \$T()", arrayListType)) // TODO remove this
                 .endControlFlow()
                 .apply {
-                    if (wildCardMirror != null && wildCardMirror.extendsBound == null && wildCardMirror.superBound == null) {
+                    if (wildCardMirror != null && wildCardMirror.superBound == null) {
                         val listName = codeGeneratorHelper.uniqueVariableName("listCastVar")
                         addStatement("java.util.List \$L = (java.util.List) $resolvedGetter", listName)
                         addStatement("\$L.add($valueFromAdapter)", listName, className)

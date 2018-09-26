@@ -820,7 +820,6 @@ class DefaultAnnotationDetectorTest {
     }
 
     @Test
-    @Ignore
     fun elementListWildcardExtendsInterfaceWithPolymorphism() {
         val componentFile = JavaFileObjects.forSourceLines("test.ElementListWildcardInterfaceWithPolymorphism",
                 "package test;",
@@ -833,13 +832,13 @@ class DefaultAnnotationDetectorTest {
                 "       @${ElementNameMatcher::class.qualifiedName}(name=\"bar\" , type=InnerClass2.class),",
                 "    })",
                 "   java.util.List<? extends MyInterface> aField;",
-                "",
-                " public interface MyInterface {}",
+                "}",
+                "interface MyInterface {}",
                 "@${Xml::class.java.canonicalName}",
-                " public class InnerClass1 implements MyInterface{}",
+                "class InnerClass1 implements MyInterface{}",
                 "@${Xml::class.java.canonicalName}",
-                " public class InnerClass2 implements MyInterface{}",
-                "}")
+                "class InnerClass2 implements MyInterface{}"
+                )
 
         Truth.assertAbout<JavaSourcesSubject.SingleSourceAdapter, JavaFileObject>(JavaSourceSubjectFactory.javaSource())
                 .that(componentFile).processedWith(XmlProcessor())
