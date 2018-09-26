@@ -28,6 +28,7 @@ import com.tickaroo.tikxml.processor.generator.CodeGeneratorHelper
 import java.util.*
 import javax.lang.model.element.VariableElement
 import javax.lang.model.type.TypeMirror
+import javax.lang.model.type.WildcardType
 
 /**
  * Represents a Field with [com.tickaroo.tikxml.annotation.Element] annotation
@@ -64,7 +65,8 @@ class PolymorphicListElementField(
         element: VariableElement,
         name: String,
         typeElementNameMatcher: List<PolymorphicTypeElementNameMatcher>,
-        val genericListTypeMirror: TypeMirror
+        val genericListTypeMirror: TypeMirror,
+        val wildcard: WildcardType?
 ) : PolymorphicElementField(
         element,
         name,
@@ -90,8 +92,8 @@ open class PolymorphicSubstitutionField(
         val className = ClassName.get(typeMirror)
         val configVarName = CodeGeneratorHelper.tikConfigParam
         val readerVarName = CodeGeneratorHelper.readerParam
-        val valueFromAdapter = "(\$T) $configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
-        return accessResolver.resolveAssignment(valueFromAdapter, className, className)
+        val valueFromAdapter = "$configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
+        return accessResolver.resolveAssignment(valueFromAdapter, className)
     }
 }
 
@@ -103,7 +105,8 @@ class PolymorphicSubstitutionListField(
         typeMirror: TypeMirror,
         accessResolver: FieldAccessResolver,
         name: String,
-        private val genericListType: TypeMirror
+        private val genericListType: TypeMirror,
+        private val wildCardMirror: WildcardType?
 ) : PolymorphicSubstitutionField(
         element,
         typeMirror,
@@ -116,15 +119,22 @@ class PolymorphicSubstitutionListField(
         val arrayListType = ParameterizedTypeName.get(ClassName.get(ArrayList::class.java), ClassName.get(genericListType))
         val configVarName = CodeGeneratorHelper.tikConfigParam
         val readerVarName = CodeGeneratorHelper.readerParam
-        val valueFromAdapter = "(\$T) $configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
+        val valueFromAdapter = "$configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
         val resolvedGetter = accessResolver.resolveGetterForReadingXml()
-        val uniqueItemVar = codeGeneratorHelper.uniqueVariableName("element")
+
         return CodeBlock.builder()
                 .beginControlFlow("if ($resolvedGetter == null)")
                 .add(accessResolver.resolveAssignment("new \$T()", arrayListType)) // TODO remove this
                 .endControlFlow()
-                .addStatement("\$T $uniqueItemVar = $valueFromAdapter", className, className, className)
-                .addStatement("$resolvedGetter.add($uniqueItemVar)")
+                .apply {
+                    if (wildCardMirror != null && wildCardMirror.extendsBound == null && wildCardMirror.superBound == null) {
+                        val listName = codeGeneratorHelper.uniqueVariableName("listCastVar")
+                        addStatement("java.util.List \$L = (java.util.List) $resolvedGetter", listName)
+                        addStatement("\$L.add($valueFromAdapter)", listName, className)
+                    } else {
+                        addStatement("$resolvedGetter.add($valueFromAdapter)", className)
+                    }
+                }
                 .build()
     }
 }

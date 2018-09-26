@@ -937,7 +937,6 @@ class DefaultAnnotationDetectorTest {
     }
 
     @Test
-    @Ignore
     fun elementListWildcardInterfaceWithoutPolymorphism() {
         val componentFile = JavaFileObjects.forSourceLines("test.ElementListWildcardInterfaceWithPolymorphism",
                 "package test;",

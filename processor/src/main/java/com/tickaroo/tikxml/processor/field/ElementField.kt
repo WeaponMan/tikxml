@@ -66,8 +66,8 @@ open class ElementField(element: VariableElement, name: String) : NamedField(ele
         val className = ClassName.get(element.asType())
         val configVarName = CodeGeneratorHelper.tikConfigParam
         val readerVarName = CodeGeneratorHelper.readerParam
-        val valueFromAdapter = "(\$T) $configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
-        return accessResolver.resolveAssignment(valueFromAdapter, className, className)
+        val valueFromAdapter = "$configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
+        return accessResolver.resolveAssignment(valueFromAdapter, className)
     }
 }
 
@@ -109,13 +109,13 @@ class ListElementField(
         val arrayListType = ParameterizedTypeName.get(ClassName.get(ArrayList::class.java), className)
         val configVarName = CodeGeneratorHelper.tikConfigParam
         val readerVarName = CodeGeneratorHelper.readerParam
-        val valueFromAdapter = "(\$T) $configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
+        val valueFromAdapter = "$configVarName.getTypeAdapter(\$T.class).fromXml($readerVarName, $configVarName)"
         val resolvedGetter = accessResolver.resolveGetterForReadingXml()
         return CodeBlock.builder()
                 .beginControlFlow("if ($resolvedGetter == null)")
-                .add(accessResolver.resolveAssignment("(\$T) new \$T()", arrayListType, arrayListType)) // TODO remove this
+                .add(accessResolver.resolveAssignment("new \$T()", arrayListType)) // TODO remove this
                 .endControlFlow()
-                .addStatement("$resolvedGetter.add($valueFromAdapter)", className, className)
+                .addStatement("$resolvedGetter.add($valueFromAdapter)", className)
                 .build()
     }
 }

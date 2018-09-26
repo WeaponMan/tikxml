@@ -333,7 +333,7 @@ class AnnotationScanner(protected val elementUtils: Elements, protected val type
                 is PolymorphicListElementField -> {
                     val path = PathDetector.getSegments(field.element)
                     for ((xmlElementName, typeMirror) in field.typeElementNameMatcher) {
-                        val sub = PolymorphicSubstitutionListField(field.element, typeMirror, field.accessResolver, xmlElementName, field.genericListTypeMirror)
+                        val sub = PolymorphicSubstitutionListField(field.element, typeMirror, field.accessResolver, xmlElementName, field.genericListTypeMirror, field.wildcard)
                         field.substitutions.add(sub)
                         annotatedClass.addChildElement(sub, path)
                     }

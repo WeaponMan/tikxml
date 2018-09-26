@@ -140,7 +140,7 @@ open class DefaultAnnotationDetector(protected val elementUtils: Elements, prote
                 // No polymorphism
                 if (isList(element)) {
 
-                    val genericListType = getGenericTypeFromList(element)
+                    val (genericListType, _) = getGenericTypeFromList(element)
                     val genericListTypeElement = typeUtils.asElement(genericListType) as TypeElement
 
                     if (elementAnnotation.compileTimeChecks) {
@@ -197,12 +197,13 @@ open class DefaultAnnotationDetector(protected val elementUtils: Elements, prote
                 // polymorphism
                 if (isList(element)) {
 
-                    val genericListType = getGenericTypeFromList(element)
+                    val (genericListType, wildCardType) = getGenericTypeFromList(element)
                     return PolymorphicListElementField(
                             element,
                             "placeHolderToSubstituteWithPolymorphicListElement",
                             getPolymorphicTypes(element, nameMatchers),
-                            genericListType
+                            genericListType,
+                            wildCardType
                     )
 
                 } else {
@@ -319,7 +320,7 @@ open class DefaultAnnotationDetector(protected val elementUtils: Elements, prote
         }
 
         // Check for subtype
-        val variableType = if (isList(variableElement)) getGenericTypeFromList(variableElement) else variableElement.asType()
+        val variableType = if (isList(variableElement)) getGenericTypeFromList(variableElement).first else variableElement.asType()
         if (!typeUtils.isAssignable(typeElement.asType(), variableType)) {
             throw ProcessingException(variableElement, "The type $typeElement must be a sub type of ${variableType}. Otherwise this type cannot be used in @${ElementNameMatcher::class.simpleName} to resolve polymorphism");
         }
@@ -346,7 +347,7 @@ open class DefaultAnnotationDetector(protected val elementUtils: Elements, prote
     /**
      * Get the genric type of a List
      */
-    protected fun getGenericTypeFromList(listVariableElement: VariableElement): TypeMirror {
+    protected fun getGenericTypeFromList(listVariableElement: VariableElement): Pair<TypeMirror, WildcardType?> {
 
         if (listVariableElement.asType().kind != TypeKind.DECLARED) {
             throw ProcessingException(listVariableElement, "Element must be of type java.util.List");
@@ -354,16 +355,16 @@ open class DefaultAnnotationDetector(protected val elementUtils: Elements, prote
 
         val typeMirror = listVariableElement.asType() as DeclaredType
         when (typeMirror.typeArguments.size) {
-            0 -> return elementUtils.getTypeElement("java.lang.Object").asType() // Raw types
+            0 -> return elementUtils.getTypeElement("java.lang.Object").asType() to null // Raw types
 
             1 -> if (typeMirror.typeArguments[0].kind == TypeKind.WILDCARD) {
                 val wildCardMirror = typeMirror.typeArguments[0] as WildcardType
                 return if (wildCardMirror.extendsBound != null)
-                    wildCardMirror.extendsBound
+                    wildCardMirror.extendsBound to wildCardMirror
                 else if (wildCardMirror.superBound != null)
-                    wildCardMirror.superBound
-                else elementUtils.getTypeElement("java.lang.Object").asType() // in case of List<?>
-            } else return typeMirror.typeArguments[0]
+                    wildCardMirror.superBound to wildCardMirror
+                else elementUtils.getTypeElement("java.lang.Object").asType() to wildCardMirror // in case of List<?>
+            } else return typeMirror.typeArguments[0] to null
 
             else -> throw ProcessingException(listVariableElement, "Seems that you have annotated a List with more than one generic argument? How is this possible?")
         }
