@@ -55,29 +55,51 @@ public class XmlReader implements Closeable {
   //
   // Peek states
   //
-  /** Nothing peeked */
+  /**
+   * Nothing peeked
+   */
   private static final int PEEKED_NONE = 0;
-  /** Peeked an xml element / object */
+  /**
+   * Peeked an xml element / object
+   */
   private static final int PEEKED_ELEMENT_BEGIN = 1;
-  /** Peeked the closing xml tag which indicates the end of an object */
+  /**
+   * Peeked the closing xml tag which indicates the end of an object
+   */
   private static final int PEEKED_ELEMENT_END = 2;
-  /** Peeked the closing xml header tag, hence we are inner xml tag object body */
+  /**
+   * Peeked the closing xml header tag, hence we are inner xml tag object body
+   */
   private static final int PEEKED_ELEMENT_TEXT_CONTENT = 3;
-  /** Peeked the end of the stream */
+  /**
+   * Peeked the end of the stream
+   */
   private static final int PEEKED_EOF = 4;
-  /** Peeked an unquoted value which can be either xml element name or element attribute name */
+  /**
+   * Peeked an unquoted value which can be either xml element name or element attribute name
+   */
   private static final int PEEKED_ELEMENT_NAME = 5;
-  /** Peeked a quoted value which is the value of an xml attribute */
+  /**
+   * Peeked a quoted value which is the value of an xml attribute
+   */
   private static final int PEEKED_DOUBLE_QUOTED = 6;
-  /** Peeked a single quote which is the value of an xml attribute */
+  /**
+   * Peeked a single quote which is the value of an xml attribute
+   */
   private static final int PEEKED_SINGLE_QUOTED = 7;
-  /** Peeked an attribute name (of a xml element) */
+  /**
+   * Peeked an attribute name (of a xml element)
+   */
   private static final int PEEKED_ATTRIBUTE_NAME = 8;
 
-  /** Peeked a CDATA */
+  /**
+   * Peeked a CDATA
+   */
   private static final int PEEKED_CDATA = 9;
 
-  /** The input XML. */
+  /**
+   * The input XML.
+   */
   private int peeked = PEEKED_NONE;
 
   private String[] pathNames = new String[32];
@@ -158,123 +180,133 @@ public class XmlReader implements Closeable {
    * @throws IOException
    */
   private int doPeek() throws IOException {
-
     int peekStack = stack[stackSize - 1];
+    int c;
+    switch (peekStack) {
+      case XmlScope.ELEMENT_OPENING:
+        c = nextNonWhitespace(true);
+        if (isLiteral((char) c)) {
+          return peeked = PEEKED_ELEMENT_NAME;
+        } else {
+          throw syntaxError("Expected xml element name (literal expected)");
+        }
 
-    if (peekStack == XmlScope.ELEMENT_OPENING) {
-      int c = nextNonWhitespace(true);
-      if (isLiteral((char) c)) {
-        return peeked = PEEKED_ELEMENT_NAME;
-      } else {
-        throw syntaxError("Expected xml element name (literal expected)");
-      }
-    } else if (peekStack == XmlScope.ELEMENT_ATTRIBUTE) {
-      int c = nextNonWhitespace(true);
+      case XmlScope.ELEMENT_ATTRIBUTE:
+        c = nextNonWhitespace(true);
 
-      if (isLiteral(c)) {
-        return peeked = PEEKED_ATTRIBUTE_NAME;
-      }
+        if (isLiteral(c)) {
+          return peeked = PEEKED_ATTRIBUTE_NAME;
+        }
 
-      switch (c) {
-        case '>':
-          // remove XmlScope.ELEMENT_ATTRIBUTE from top of the stack
-          popStack();
-
-          // set previous stack from XmlScope.ELEMENT_OPENING to XmlScope.ELEMENT_CONTENT
-          stack[stackSize - 1] = XmlScope.ELEMENT_CONTENT;
-          buffer.readByte(); // consume '>'
-
-          int nextChar = nextNonWhitespace(true);
-
-          if (nextChar != '<') {
-            return peeked = PEEKED_ELEMENT_TEXT_CONTENT;
-          }
-
-          if (isCDATA()) {
-            buffer.skip(9); // skip opening cdata tag
-            return peeked = PEEKED_CDATA;
-          }
-          break;
-
-        case '/':
-          // Self closing />
-
-          if (fillBuffer(2) && buffer.getByte(1) == '>') {
+        switch (c) {
+          case '>':
             // remove XmlScope.ELEMENT_ATTRIBUTE from top of the stack
             popStack();
 
-            // correct closing xml tag
-            buffer.skip(2); // consuming '/>'
+            // set previous stack from XmlScope.ELEMENT_OPENING to XmlScope.ELEMENT_CONTENT
+            stack[stackSize - 1] = XmlScope.ELEMENT_CONTENT;
+            buffer.readByte(); // consume '>'
 
-            return peeked = PEEKED_ELEMENT_END;
-          } else {
-            throw syntaxError("Expected closing />");
-          }
+            int nextChar = nextNonWhitespace(true);
 
-        case '=':
-          buffer.readByte(); // consume '='
+            if (nextChar != '<') {
+              return peeked = PEEKED_ELEMENT_TEXT_CONTENT;
+            }
 
-          // Read next char which should be a quote
-          c = nextNonWhitespace(true);
+            if (isCDATA()) {
+              buffer.skip(9); // skip opening cdata tag
+              return peeked = PEEKED_CDATA;
+            }
+            break;
 
-          switch (c) {
-            case '"':
-              buffer.readByte(); // consume "
-              return peeked = PEEKED_DOUBLE_QUOTED;
-            case '\'':
-              buffer.readByte(); // consume '
-              return peeked = PEEKED_SINGLE_QUOTED;
+          case '/':
+            // Self closing />
 
-            default:
-              throw syntaxError(
-                  "Expected double quote (\") or single quote (') while reading xml elements attribute");
-          }
+            if (fillBuffer(2) && buffer.getByte(1) == '>') {
+              // remove XmlScope.ELEMENT_ATTRIBUTE from top of the stack
+              popStack();
 
-        default:
-          throw syntaxError("Unexpected character '"
-              + ((char) c)
-              + "' while trying to read xml elements attribute");
-      }
-    } else if (peekStack == XmlScope.ELEMENT_CONTENT) {
-      int c = nextNonWhitespace(true);
+              // correct closing xml tag
+              buffer.skip(2); // consuming '/>'
 
-      if (c != '<') {
-        return peeked = PEEKED_ELEMENT_TEXT_CONTENT;
-      }
+              return peeked = PEEKED_ELEMENT_END;
+            } else {
+              throw syntaxError("Expected closing />");
+            }
 
-      if (isCDATA()) {
-        buffer.skip(9); // skip opening cdata tag
-        return peeked = PEEKED_CDATA;
-      }
-    } else if (peekStack == XmlScope.EMPTY_DOCUMENT) {
-      stack[stackSize - 1] = XmlScope.NONEMPTY_DOCUMENT;
-    } else if (peekStack == XmlScope.NONEMPTY_DOCUMENT) {
-      int c = nextNonWhitespace(false);
-      if (c == -1) {
-        return peeked = PEEKED_EOF;
-      }
-    } else if (peekStack == XmlScope.CLOSED) {
-      throw new IllegalStateException("XmlReader is closed");
+          case '=':
+            buffer.readByte(); // consume '='
+
+            // Read next char which should be a quote
+            c = nextNonWhitespace(true);
+
+            switch (c) {
+              case '"':
+                buffer.readByte(); // consume "
+                return peeked = PEEKED_DOUBLE_QUOTED;
+              case '\'':
+                buffer.readByte(); // consume '
+                return peeked = PEEKED_SINGLE_QUOTED;
+
+              default:
+                throw syntaxError(
+                    "Expected double quote (\") or single quote (') while reading xml elements attribute");
+            }
+
+          default:
+            throw syntaxError("Unexpected character '"
+                + ((char) c)
+                + "' while trying to read xml elements attribute");
+        }
+        break;
+      case XmlScope.ELEMENT_CONTENT:
+        c = nextNonWhitespace(true);
+
+        if (c != '<') {
+          return peeked = PEEKED_ELEMENT_TEXT_CONTENT;
+        }
+
+        if (isCDATA()) {
+          buffer.skip(9); // skip opening cdata tag
+          return peeked = PEEKED_CDATA;
+        }
+        break;
+      case XmlScope.EMPTY_DOCUMENT:
+        stack[stackSize - 1] = XmlScope.NONEMPTY_DOCUMENT;
+        if (source.rangeEquals(0, UTF8_BOM)) {
+          source.skip(3);
+        }
+        break;
+      case XmlScope.NONEMPTY_DOCUMENT:
+        c = nextNonWhitespace(false);
+        if (c == -1) {
+          return peeked = PEEKED_EOF;
+        }
+        break;
+
+      case XmlScope.CLOSED:
+        throw new IllegalStateException("XmlReader is closed");
+
     }
 
-    int c = nextNonWhitespace(true, peekStack == XmlScope.EMPTY_DOCUMENT);
+    c = nextNonWhitespace(true);
     switch (c) {
 
       // Handling open < and closing </
       case '<':
-        buffer.readByte(); // consume '<'.
+        buffer.skip(1); // consume '<'.
 
         // Check if </ which means end of element
         if (fillBuffer(1) && buffer.getByte(0) == '/') {
 
-          buffer.readByte(); // consume /
+          buffer.skip(1); // consume /
 
           // Check if it is the corresponding xml element name
           String closingElementName = nextUnquotedValue();
           if (closingElementName != null && closingElementName.equals(pathNames[stackSize - 1])) {
 
             if (nextNonWhitespace(false) == '>') {
-              buffer.readByte(); // consume >
+              buffer.skip(1); // consume >
               return peeked = PEEKED_ELEMENT_END;
             } else {
               syntaxError("Missing closing '>' character in </" + pathNames[stackSize - 1]);
@@ -291,11 +323,11 @@ public class XmlReader implements Closeable {
         return peeked = PEEKED_ELEMENT_BEGIN;
 
       case '"':
-        buffer.readByte(); // consume '"'.
+        buffer.skip(1); // consume '"'.
         return peeked = PEEKED_DOUBLE_QUOTED;
 
       case '\'':
-        buffer.readByte(); // consume '
+        buffer.skip(1); // consume '
         return peeked = PEEKED_SINGLE_QUOTED;
     }
 
@@ -529,10 +561,10 @@ public class XmlReader implements Closeable {
   /**
    * Get the next text content of an xml element. Text content is {@code <element>text
    * content</element>}
-   *
+   * <p>
    * If the element is empty (no content) like {@code <element></element>} this method will return
    * the empty string "".
-   *
+   * <p>
    * {@code null} as return type is not supported yet, because there is no way in xml to distinguish
    * between empty string "" or null since both might be represented with {@code
    * <element></element>}. So if you want to represent a null element, simply don't write the
@@ -769,71 +801,57 @@ public class XmlReader implements Closeable {
    * caller can always pushStack back the returned character by decrementing {@code pos}.
    */
   private int nextNonWhitespace(boolean throwOnEof) throws IOException {
-    return nextNonWhitespace(throwOnEof, false);
-  }
-
-  /**
-   * Returns the next character in the stream that is neither whitespace nor a part of a comment.
-   * When this returns, the returned character is always at {@code buffer[pos-1]}; this means the
-   * caller can always pushStack back the returned character by decrementing {@code pos}.
-   */
-  private int nextNonWhitespace(boolean throwOnEof, boolean isDocumentBeginning) throws IOException {
-    /*
-     * This code uses ugly local variables 'p' and 'l' representing the 'pos'
-     * and 'limit' fields respectively. Using locals rather than fields saves
-     * a few field reads for each whitespace character in a pretty-printed
-     * document, resulting in a 5% speedup. We need to flush 'p' to its field
-     * before any (potentially indirect) call to fillBuffer() and reread both
-     * 'p' and 'l' after any (potentially indirect) call to the same method.
-     */
-
-    // Look for UTF-8 BOM sequence 0xEFBBBF and skip it
-    if (isDocumentBeginning && source.rangeEquals(0, UTF8_BOM)) {
-      source.skip(3);
-    }
-
     int p = 0;
     while (fillBuffer(p + 1)) {
       int c = buffer.getByte(p++);
-      if (c == '\n' || c == ' ' || c == '\r' || c == '\t') {
-        continue;
+
+      switch (c) {
+        case '\n':
+        case ' ':
+        case '\r':
+        case '\t':
+          continue;
+        case '<':
+          buffer.skip(p - 1);
+          if (isCDATA()) {
+            return c;
+          }
+
+          byte peek = buffer.getByte(1);
+          int peekStack = stack[stackSize - 1];
+          boolean peekedNonEmpty = peekStack == XmlScope.NONEMPTY_DOCUMENT;
+          if (peekedNonEmpty && isDocTypeDefinition()) {
+            long index = source.indexOf(CLOSING_XML_ELEMENT, DOCTYPE_OPEN.size());
+            if (index == -1) {
+              throw syntaxError("Unterminated <!DOCTYPE> . Inline DOCTYPE is not support at the moment.");
+            }
+            source.skip(index + 1); // skip behind >
+            // TODO inline DOCTYPE.
+            p = 0;
+            continue;
+          } else if (peek == '!') {
+            long index = source.indexOf(COMMENT_CLOSE, 4); // skip <!-- in comparison by offset 4
+            if (index == -1) {
+              throw syntaxError("Unterminated comment");
+            }
+            source.skip(index + COMMENT_CLOSE.size()); // skip behind --!>
+            p = 0;
+            continue;
+          } else if (peekedNonEmpty && peek == '?') {
+            long index = source.indexOf(XML_DECLARATION_CLOSE, 2); // skip <? in comparison by offset 2
+            if (index == -1) {
+              throw syntaxError("Unterminated xml declaration or processing instruction \"<?\"");
+            }
+            source.skip(index + XML_DECLARATION_CLOSE.size()); // skip behind ?>
+            p = 0;
+            continue;
+          }
+
+          return c;
+        default:
+          buffer.skip(p - 1);
+          return c;
       }
-
-      buffer.skip(p - 1);
-      if (c == '<' && !isCDATA()) {
-
-        byte peek = buffer.getByte(1);
-        int peekStack = stack[stackSize - 1];
-
-        if (peekStack == XmlScope.NONEMPTY_DOCUMENT && isDocTypeDefinition()) {
-          long index = source.indexOf(CLOSING_XML_ELEMENT, DOCTYPE_OPEN.size());
-          if (index == -1) {
-            throw syntaxError("Unterminated <!DOCTYPE> . Inline DOCTYPE is not support at the moment.");
-          }
-          source.skip(index + 1); // skip behind >
-          // TODO inline DOCTYPE.
-          p = 0;
-          continue;
-        } else if (peek == '!' && fillBuffer(4)) {
-          long index = source.indexOf(COMMENT_CLOSE, 4); // skip <!-- in comparison by offset 4
-          if (index == -1) {
-            throw syntaxError("Unterminated comment");
-          }
-          source.skip(index + COMMENT_CLOSE.size()); // skip behind --!>
-          p = 0;
-          continue;
-        } else if (peek == '?') {
-          long index = source.indexOf(XML_DECLARATION_CLOSE, 2); // skip <? in comparison by offset 2
-          if (index == -1) {
-            throw syntaxError("Unterminated xml declaration or processing instruction \"<?\"");
-          }
-          source.skip(index + XML_DECLARATION_CLOSE.size()); // skip behind ?>
-          p = 0;
-          continue;
-        }
-      }
-
-      return c;
     }
 
     if (throwOnEof) {
@@ -876,7 +894,9 @@ public class XmlReader implements Closeable {
     return result;
   }
 
-  /** Returns an unquoted value as a string. */
+  /**
+   * Returns an unquoted value as a string.
+   */
   private String nextUnquotedValue() throws IOException {
     long i = source.indexOfElement(UNQUOTED_STRING_TERMINALS);
     return i != -1 ? buffer.readUtf8(i) : buffer.readUtf8();
@@ -1084,7 +1104,7 @@ public class XmlReader implements Closeable {
    * Skip an unquoted value
    *
    * @throws IOException
-   *
+   * <p>
    * private void skipUnquotedValue() throws IOException { long i = source.indexOfElement(UNQUOTED_STRING_TERMINALS);
    * buffer.skip(i != -1L ? i : buffer.size()); }
    */
